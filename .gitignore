@@ -1,0 +1,23 @@
+# Environment files (contains API keys - never commit!)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Data (runtime generated)
+data/chroma_db/
+data/memory.db
+data/embedding_cache.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
