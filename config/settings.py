@@ -1,7 +1,6 @@
 """
 Configuration settings for the Math Mentor application.
-Loads settings from environment variables with sensible defaults.
-Uses Gemini for LLM and embeddings with quota protection.
+Loads settings from environment variables or Streamlit secrets.
 """
 
 import os
@@ -9,8 +8,22 @@ from dataclasses import dataclass
 from typing import Optional
 from dotenv import load_dotenv
 
-# Force reload environment variables
+# Try to load .env file (for local development)
 load_dotenv(override=True)
+
+
+def get_secret(key: str, default: str = "") -> str:
+    """Get secret from Streamlit secrets or environment variable."""
+    # Try Streamlit secrets first (for cloud deployment)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except:
+        pass
+    
+    # Fall back to environment variable (for local development)
+    return os.getenv(key, default)
 
 
 @dataclass
@@ -18,58 +31,80 @@ class Settings:
     """Application configuration settings."""
     
     # Gemini API Configuration
-    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/text-embedding-004")
+    gemini_api_key: str = ""
+    gemini_model: str = ""
+    embedding_model: str = ""
     
     # Whisper Settings
-    whisper_model: str = os.getenv("WHISPER_MODEL", "base")
+    whisper_model: str = ""
     
     # Confidence Thresholds
-    ocr_confidence_threshold: float = float(os.getenv("OCR_CONFIDENCE_THRESHOLD", "0.6"))
-    asr_confidence_threshold: float = float(os.getenv("ASR_CONFIDENCE_THRESHOLD", "0.7"))
-    verifier_confidence_threshold: float = float(os.getenv("VERIFIER_CONFIDENCE_THRESHOLD", "0.7"))
+    ocr_confidence_threshold: float = 0.6
+    asr_confidence_threshold: float = 0.7
+    verifier_confidence_threshold: float = 0.7
     
-    # RAG Settings (reduced to save quota)
-    rag_top_k: int = int(os.getenv("RAG_TOP_K", "2"))
-    chunk_size: int = int(os.getenv("CHUNK_SIZE", "800"))
-    chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "50"))
+    # RAG Settings
+    rag_top_k: int = 2
+    chunk_size: int = 800
+    chunk_overlap: int = 50
     
     # Memory Settings
-    memory_similarity_threshold: float = float(os.getenv("MEMORY_SIMILARITY_THRESHOLD", "0.8"))
-    max_similar_problems: int = int(os.getenv("MAX_SIMILAR_PROBLEMS", "2"))
+    memory_similarity_threshold: float = 0.8
+    max_similar_problems: int = 2
     
     # Paths
-    knowledge_base_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge_base")
-    data_path: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-    chroma_db_path: str = os.path.join(data_path, "chroma_db")
-    memory_db_path: str = os.path.join(data_path, "memory.db")
-    embedding_cache_path: str = os.path.join(data_path, "embedding_cache.json")
+    knowledge_base_path: str = ""
+    data_path: str = ""
+    chroma_db_path: str = ""
+    memory_db_path: str = ""
+    embedding_cache_path: str = ""
     
     def __post_init__(self):
-        """Validate required settings and create directories."""
+        """Load settings from secrets/env and create directories."""
+        # Load from secrets or environment
+        self.gemini_api_key = get_secret("GEMINI_API_KEY", "")
+        self.gemini_model = get_secret("GEMINI_MODEL", "gemini-2.0-flash")
+        self.embedding_model = get_secret("EMBEDDING_MODEL", "models/text-embedding-004")
+        self.whisper_model = get_secret("WHISPER_MODEL", "base")
+        
+        self.ocr_confidence_threshold = float(get_secret("OCR_CONFIDENCE_THRESHOLD", "0.6"))
+        self.asr_confidence_threshold = float(get_secret("ASR_CONFIDENCE_THRESHOLD", "0.7"))
+        self.verifier_confidence_threshold = float(get_secret("VERIFIER_CONFIDENCE_THRESHOLD", "0.7"))
+        
+        self.rag_top_k = int(get_secret("RAG_TOP_K", "2"))
+        self.chunk_size = int(get_secret("CHUNK_SIZE", "800"))
+        self.chunk_overlap = int(get_secret("CHUNK_OVERLAP", "50"))
+        
+        self.memory_similarity_threshold = float(get_secret("MEMORY_SIMILARITY_THRESHOLD", "0.8"))
+        self.max_similar_problems = int(get_secret("MAX_SIMILAR_PROBLEMS", "2"))
+        
+        # Set paths
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        self.knowledge_base_path = os.path.join(base_dir, "knowledge_base")
+        self.data_path = os.path.join(base_dir, "data")
+        self.chroma_db_path = os.path.join(self.data_path, "chroma_db")
+        self.memory_db_path = os.path.join(self.data_path, "memory.db")
+        self.embedding_cache_path = os.path.join(self.data_path, "embedding_cache.json")
+        
         # Create data directories if they don't exist
         os.makedirs(self.data_path, exist_ok=True)
         os.makedirs(self.chroma_db_path, exist_ok=True)
         
         # Validate API key
         if not self.gemini_api_key:
-            print("Warning: GEMINI_API_KEY not set. Some features may not work.")
+            print("Warning: GEMINI_API_KEY not set!")
     
     def validate(self) -> bool:
         """Validate that all required settings are present."""
-        if not self.gemini_api_key:
-            return False
-        return True
+        return bool(self.gemini_api_key)
 
 
-# Global settings instance (no caching, reads fresh values)
+# Global settings instance
 _settings = None
 
 def get_settings() -> Settings:
     """Get settings instance."""
     global _settings
     if _settings is None:
-        load_dotenv(override=True)  # Force reload
         _settings = Settings()
     return _settings
